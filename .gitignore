@@ -1,0 +1,9 @@
+# Ignore .envrc file containing secrets
+.envrc
+
+# Ignore compiled binary
+ignite_karaoke
+
+# Ignore air temp directory and log file
+tmp
+air.log 

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ignite Karaoke - Game</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div id="timer">1:00</div>
+    <div id="slide-container">
+        <div class="slide" id="slide1">
+            <div class="text-content">
+                <h1>Welcome, {{.ParticipantName}}!</h1>
+                <p>The rules are simple: you have 1 minute to talk to 4 slides. The slides will auto-advance.</p>
+            </div>
+        </div>
+        <div class="slide" id="slide2">
+            <div class="text-content">
+                <h2>{{.BusinessName}}</h2>
+                <p>{{.Slogan}}</p>
+            </div>
+        </div>
+        <div class="slide" id="slide3">
+             <div class="image-content">
+                <img src="{{.Image1}}" alt="Random Image 1">
+            </div>
+        </div>
+        <div class="slide" id="slide4">
+            <div class="image-content">
+                <img src="{{.Image2}}" alt="Random Image 2">
+            </div>
+        </div>
+        <div class="slide" id="slide5">
+            <div class="text-content">
+                <h1>Good job, {{.ParticipantName}}!</h1>
+            </div>
+            <div class="image-content">
+                <img src="{{.ClappingGif}}" alt="Clapping GIF">
+            </div>
+        </div>
+    </div>
+    <script src="/static/js/game.js"></script>
+</body>
+</html> 
