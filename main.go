@@ -40,6 +40,8 @@ func main() {
 	http.HandleFunc("/", indexHandler)
 	http.HandleFunc("/admin", adminHandler)
 	http.HandleFunc("/participants", participantsHandler)
+	http.HandleFunc("/remove-participant", removeParticipantHandler)
+	http.HandleFunc("/next-participant", nextParticipantHandler)
 	http.HandleFunc("/game/", gameHandler)
 	http.HandleFunc("/api/game-data/", gameDataHandler)
 
@@ -73,7 +75,14 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func adminHandler(w http.ResponseWriter, r *http.Request) {
-	templates.ExecuteTemplate(w, "admin.html", nil)
+	participantsMu.Lock()
+	defer participantsMu.Unlock()
+	data := struct {
+		Participants []string
+	}{
+		Participants: participants,
+	}
+	templates.ExecuteTemplate(w, "admin.html", data)
 }
 
 func participantsHandler(w http.ResponseWriter, r *http.Request) {
@@ -99,6 +108,48 @@ func participantsHandler(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
+func removeParticipantHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	nameToRemove := r.FormValue("name")
+	if nameToRemove == "" {
+		http.Error(w, "Participant name cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	participantsMu.Lock()
+	defer participantsMu.Unlock()
+
+	var newParticipants []string
+	for _, p := range participants {
+		if p != nameToRemove {
+			newParticipants = append(newParticipants, p)
+		}
+	}
+	participants = newParticipants
+
+	http.Redirect(w, r, "/admin", http.StatusSeeOther)
+}
+
+func nextParticipantHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	participantsMu.Lock()
+	defer participantsMu.Unlock()
+
+	if len(participants) > 0 {
+		participants = participants[1:]
+	}
+
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
 func generateBusinessIdea(ctx context.Context) (string, string, error) {
 	apiKey := os.Getenv("GOOGLE_API_KEY")
 	if apiKey == "" {
@@ -110,8 +161,12 @@ func generateBusinessIdea(ctx context.Context) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
+	config := &genai.GenerateContentConfig{
+		Temperature: genai.Ptr[float32](0.9),
+	}
+
 	prompt := genai.Text("Generate a fake, humorous business name and a slogan for it. Return it as 'Name: <name> Slogan: <slogan>'")
-	resp, err := client.Models.GenerateContent(ctx, "gemini-1.5-pro-latest", prompt, nil)
+	resp, err := client.Models.GenerateContent(ctx, "gemini-1.5-pro-latest", prompt, config)
 
 	if err != nil {
 		return "", "", err
@@ -141,6 +196,18 @@ func generateBusinessIdea(ctx context.Context) (string, string, error) {
 	return namePart, sloganPart, nil
 }
 
+type ImagePromptRequest struct {
+	CharacterAgeRange string `json:"character_age_range"`
+	Setting           string `json:"setting"`
+	AbsurdTwist       string `json:"absurd_twist"`
+	VisualStyle       string `json:"visual_style"`
+	FinalPrompt       string `json:"final_prompt"`
+}
+
+func getRandomElement(slice []string) string {
+	return slice[rand.Intn(len(slice))]
+}
+
 func generateImagePrompt(ctx context.Context) (string, error) {
 	apiKey := os.Getenv("GOOGLE_API_KEY")
 	if apiKey == "" {
@@ -153,12 +220,31 @@ func generateImagePrompt(ctx context.Context) (string, error) {
 		return "", err
 	}
 
+	characterAges := []string{"child", "teenager", "adult", "middle-aged", "elderly"}
+	settings := []string{"unexpected public place", "outer space", "underwater", "historic era", "corporate office", "dreamlike zone"}
+	absurdTwists := []string{"prop or situation that contradicts logic or expectations", "a mundane task performed in an extreme environment", "animals behaving like humans in a specific, detailed way", "a historical figure using modern technology", "an inanimate object coming to life with a strong personality"}
+
+	request := ImagePromptRequest{
+		CharacterAgeRange: getRandomElement(characterAges),
+		Setting:           getRandomElement(settings),
+		AbsurdTwist:       getRandomElement(absurdTwists),
+		VisualStyle:       "photorealistic",
+		FinalPrompt:       "[Write a single, richly detailed, photorealistic image prompt for a SFW AI image generator. It should use these fields to describe a vivid, absurd and comedic scene. The description must be specific, visual, and funny — like something from a dream or a comedy sketch. Avoid clichés, generic phrasing and jokes involving suicide.]",
+	}
+
+	jsonRequest, err := json.Marshal(request)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal prompt request: %w", err)
+	}
+
 	config := &genai.GenerateContentConfig{
 		Temperature:     genai.Ptr[float32](0.9),
 		MaxOutputTokens: 400,
 	}
 
-	prompt := genai.Text("Generate a single, detailed visual concept for a humorous AI-generated image featuring a person in a highly absurd, unexpected situation. The setting, props, and action should be visually rich and specific. The scene should involve only humans (or humanoid roles), not animals, unless they are essential to the joke. Avoid repetition of themes like squirrels, woodland scenes, or typical fantasy tropes. Tailor the description to suit a photorealistic or stylized image model like imagen-3.0-generate-002. Example: 'A man in a tuxedo frantically typing on a glowing laptop in the middle of a noodle-eating contest, surrounded by confused contestants and flying spaghetti.'")
+	finalPrompt := fmt.Sprintf("Based on the following JSON, generate the 'final_prompt':\n\n%s", string(jsonRequest))
+
+	prompt := genai.Text(finalPrompt)
 
 	resp, err := client.Models.GenerateContent(ctx, "gemini-1.5-pro-latest", prompt, config)
 	if err != nil {

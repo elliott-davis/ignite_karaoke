@@ -4,13 +4,85 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ignite Karaoke - Admin</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔥</text></svg>">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        body {
+            justify-content: flex-start;
+            padding-top: 50px;
+        }
+        .container {
+            width: 80%;
+            max-width: 800px;
+        }
+        h1, h2 {
+            text-align: center;
+            width: 100%;
+        }
+        textarea, button {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #f0ad4e;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+        li {
+            background-color: #333;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .remove-btn {
+            background-color: #d9534f;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+    </style>
 </head>
 <body>
-    <h1>Add Participants</h1>
-    <form action="/participants" method="post">
-        <textarea name="names" rows="10" cols="30" placeholder="Enter participant names, one per line"></textarea>
-        <br>
-        <button type="submit">Add Participants</button>
-    </form>
+    <div class="container">
+        <h1>Admin Panel</h1>
+
+        <h2>Add/Update Participants</h2>
+        <form action="/participants" method="post">
+            <textarea name="names" rows="10" cols="30" placeholder="Enter participant names, one per line. This will replace the entire list.">{{range .Participants}}{{.}}
+{{end}}</textarea>
+            <br>
+            <button type="submit">Update Participant List</button>
+        </form>
+
+        <h2>Current Queue</h2>
+        <ul>
+            {{range .Participants}}
+            <li>
+                <span>{{.}}</span>
+                <form action="/remove-participant" method="post" style="display: inline;">
+                    <input type="hidden" name="name" value="{{.}}">
+                    <button type="submit" class="remove-btn">Remove</button>
+                </form>
+            </li>
+            {{else}}
+            <li>No participants in the queue.</li>
+            {{end}}
+        </ul>
+         <a href="/" style="display: block; text-align: center; margin-top: 20px;">Back to Home</a>
+    </div>
 </body>
 </html> 

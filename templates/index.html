@@ -4,18 +4,42 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ignite Karaoke</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔥</text></svg>">
+    <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <h1>Participants</h1>
-    <ul>
-        {{range .Participants}}
-            <li>{{.}}</li>
-        {{end}}
-    </ul>
+    <div class="container">
+        <div class="index-header">
+            <h1>Ignite Karaoke</h1>
+            <p>Welcome to the ultimate presentation challenge.</p>
+        </div>
 
-    <h2>Next Up: {{.Next}}</h2>
-    {{if .Next}}
-        <a href="/game/{{.Next}}">Start Game for {{.Next}}</a>
-    {{end}}
+        {{if .Next}}
+            <div class="next-up-section">
+                <h2>Next Up: <span class="next-participant">{{.Next}}</span></h2>
+                <a href="/game/{{.Next}}" class="start-game-btn">Start Game</a>
+            </div>
+        {{else}}
+            <div class="no-participants">
+                <h2>The stage is empty!</h2>
+                <p>Go to the admin panel to add participants to the queue.</p>
+            </div>
+        {{end}}
+
+        <div class="participant-queue">
+            <h3>Queue</h3>
+            <ul>
+                {{range $i, $p := .Participants}}
+                    {{if $i}} <!-- Exclude the first participant -->
+                        <li>{{$p}}</li>
+                    {{end}}
+                {{end}}
+            </ul>
+        </div>
+
+        <div class="admin-link-container">
+            <a href="/admin" class="admin-link">Admin Panel</a>
+        </div>
+    </div>
 </body>
 </html> 

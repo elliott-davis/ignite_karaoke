@@ -3,6 +3,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const slides = document.querySelectorAll('.slide');
     const loader = document.getElementById('loader');
     const slideContainer = document.getElementById('slide-container');
+    const nextParticipantForm = document.getElementById('next-participant-form');
     let currentSlide = 0;
     let timeLeft = 60;
 
@@ -38,21 +39,20 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const startTimer = () => {
-        const timer = setInterval(() => {
+        const timerInterval = setInterval(() => {
             timeLeft--;
             const minutes = Math.floor(timeLeft / 60);
             const seconds = timeLeft % 60;
-            timerDisplay.textContent = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+            timerDisplay.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
-            if (timeLeft % 15 === 0 && timeLeft > 0) {
+            if (timeLeft % 15 === 0) {
                 advanceSlide();
             }
 
             if (timeLeft <= 0) {
-                clearInterval(timer);
-                // Show the final slide
-                slides[currentSlide].style.display = 'none';
-                document.getElementById('slide5').style.display = 'flex';
+                clearInterval(timerInterval);
+                timerDisplay.textContent = "Time's Up!";
+                nextParticipantForm.style.display = 'block';
             }
         }, 1000);
     }

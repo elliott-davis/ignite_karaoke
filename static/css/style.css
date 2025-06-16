@@ -122,4 +122,98 @@ p {
     to {
         transform: rotate(360deg);
     }
+}
+
+#next-participant-form button {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    background-color: #5cb85c;
+    color: white;
+    padding: 15px 25px;
+    font-size: 1.2em;
+    border-radius: 50px;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    transition: all 0.2s ease-in-out;
+    opacity: 1;
+}
+
+#next-participant-form button:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+}
+
+/* Index Page Styles */
+.index-header {
+    text-align: center;
+    margin-bottom: 40px;
+}
+
+.index-header h1 {
+    font-size: 3.5em;
+    margin-bottom: 10px;
+}
+
+.next-up-section, .no-participants {
+    text-align: center;
+    background-color: #1a1a1a;
+    padding: 30px;
+    border-radius: 10px;
+    margin-bottom: 40px;
+}
+
+.next-participant {
+    color: #f0ad4e;
+    font-weight: bold;
+}
+
+.start-game-btn {
+    display: inline-block;
+    background-color: #5cb85c;
+    color: white;
+    padding: 15px 30px;
+    border-radius: 5px;
+    text-decoration: none;
+    font-size: 1.5em;
+    margin-top: 20px;
+    transition: background-color 0.2s;
+}
+
+.start-game-btn:hover {
+    background-color: #4cae4c;
+}
+
+.participant-queue {
+    text-align: center;
+}
+
+.participant-queue ul {
+    list-style: none;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.participant-queue li {
+    background-color: #333;
+    padding: 10px 20px;
+    border-radius: 5px;
+}
+
+.admin-link-container {
+    text-align: center;
+    margin-top: 50px;
+}
+
+.admin-link {
+    color: #aaa;
+    text-decoration: none;
+}
+
+.admin-link:hover {
+    color: #fff;
 } 
