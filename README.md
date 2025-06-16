@@ -33,6 +33,13 @@ go run main.go
 
 The server will start on port `8080`.
 
+To run the application for development with hot-reloading, use the `dev` target in the Makefile:
+
+```bash
+make dev
+```
+This requires the `air` tool to be installed (`go install github.com/air-verse/air@latest`).
+
 ## How to Play
 
 1.  **Admin Page:**
@@ -44,4 +51,31 @@ The server will start on port `8080`.
 3.  **Game Page:**
     To start the game for a participant, you'll need to manually construct the URL for now. For example, if the next participant is "Alice", you would navigate to `http://localhost:8080/game/Alice`.
 
-    Once on the game page, the 1-minute timer will start automatically. The slides will advance every 15 seconds. Enjoy the show! 
+    Once on the game page, the 1-minute timer will start automatically. The slides will advance every 15 seconds. Enjoy the show!
+
+## Deployment
+
+This project uses `ko` to build and publish a minimal container image without a Dockerfile.
+
+1.  **Install `ko`:**
+    If you don't have it, install `ko`:
+    ```bash
+    go install github.com/google/ko@latest
+    ```
+
+2.  **Set Your Repository:**
+    `ko` publishes images to a container registry. You need to specify your registry by setting the `KO_DOCKER_REPO` environment variable. For example:
+    ```bash
+    export KO_DOCKER_REPO="gcr.io/your-gcp-project"
+    ```
+    You also need to be authenticated with your chosen registry (e.g., `gcloud auth configure-docker`, `docker login`).
+
+3.  **Update the Makefile:**
+    Open the `Makefile` and change the `your-repo-name` placeholder in the `release` target to your actual `KO_DOCKER_REPO` value.
+
+4.  **Build and Publish:**
+    Run the release target:
+    ```bash
+    make release
+    ```
+    `ko` will build the application, push the container image to your repository, and print the resulting image digest. You can then use this image in your deployment environment (e.g., Kubernetes). 

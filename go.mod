@@ -1,4 +1,4 @@
-module ignite_karaoke
+module github.com/elliott-davis/ignite_karaoke
 
 go 1.24
 
