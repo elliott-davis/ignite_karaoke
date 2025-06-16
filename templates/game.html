@@ -8,7 +8,11 @@
 </head>
 <body>
     <div id="timer">1:00</div>
-    <div id="slide-container">
+    <div id="loader">
+        <div class="spinner"></div>
+        <p>Generating your presentation...</p>
+    </div>
+    <div id="slide-container" style="display: none;">
         <div class="slide" id="slide1">
             <div class="text-content">
                 <h1>Welcome, {{.ParticipantName}}!</h1>
@@ -17,18 +21,18 @@
         </div>
         <div class="slide" id="slide2">
             <div class="text-content">
-                <h2>{{.BusinessName}}</h2>
-                <p>{{.Slogan}}</p>
+                <h2 id="business-name"></h2>
+                <p id="slogan"></p>
             </div>
         </div>
         <div class="slide" id="slide3">
              <div class="image-content">
-                <img src="{{.Image1}}" alt="Random Image 1">
+                <img id="image1" src="" alt="Generated Image 1">
             </div>
         </div>
         <div class="slide" id="slide4">
             <div class="image-content">
-                <img src="{{.Image2}}" alt="Random Image 2">
+                <img id="image2" src="" alt="Generated Image 2">
             </div>
         </div>
         <div class="slide" id="slide5">
@@ -36,10 +40,10 @@
                 <h1>Good job, {{.ParticipantName}}!</h1>
             </div>
             <div class="image-content">
-                <img src="{{.ClappingGif}}" alt="Clapping GIF">
+                <img id="clapping-gif" src="" alt="Clapping GIF">
             </div>
         </div>
     </div>
-    <script src="/static/js/game.js"></script>
+    <script src="/static/js/game.js?v=2"></script>
 </body>
 </html> 

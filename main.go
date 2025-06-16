@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"log"
 	"math/rand"
 	"net/http"
 	"os"
@@ -12,8 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/generative-ai-go/genai"
-	"google.golang.org/api/option"
+	"google.golang.org/genai"
 )
 
 var (
@@ -40,6 +41,7 @@ func main() {
 	http.HandleFunc("/admin", adminHandler)
 	http.HandleFunc("/participants", participantsHandler)
 	http.HandleFunc("/game/", gameHandler)
+	http.HandleFunc("/api/game-data/", gameDataHandler)
 
 	// Serve static files
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
@@ -102,33 +104,26 @@ func generateBusinessIdea(ctx context.Context) (string, string, error) {
 	if apiKey == "" {
 		return "", "", fmt.Errorf("GOOGLE_API_KEY not set")
 	}
-	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey: apiKey,
+	})
 	if err != nil {
 		return "", "", err
 	}
-	defer client.Close()
-
-	model := client.GenerativeModel("gemini-1.5-flash")
 	prompt := genai.Text("Generate a fake, humorous business name and a slogan for it. Return it as 'Name: <name> Slogan: <slogan>'")
+	resp, err := client.Models.GenerateContent(ctx, "gemini-1.5-flash", prompt, nil)
 
-	resp, err := model.GenerateContent(ctx, prompt)
 	if err != nil {
 		return "", "", err
 	}
 
-	// It's a bit more complex to get the exact text, so we'll have to iterate.
 	var textContent string
-	for _, cand := range resp.Candidates {
-		if cand.Content != nil {
-			for _, part := range cand.Content.Parts {
-				if txt, ok := part.(genai.Text); ok {
-					textContent = string(txt)
-					break
-				}
+	if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
+		for _, part := range resp.Candidates[0].Content.Parts {
+			if part.Text != "" {
+				textContent = string(part.Text)
+				break
 			}
-		}
-		if textContent != "" {
-			break
 		}
 	}
 
@@ -144,6 +139,76 @@ func generateBusinessIdea(ctx context.Context) (string, string, error) {
 	sloganPart := strings.TrimSpace(parts[1])
 
 	return namePart, sloganPart, nil
+}
+
+func generateImagePrompt(ctx context.Context) (string, error) {
+	apiKey := os.Getenv("GOOGLE_API_KEY")
+	if apiKey == "" {
+		return "", fmt.Errorf("GOOGLE_API_KEY not set")
+	}
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey: apiKey,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	prompt := genai.Text("Generate a short, humorous, SFW prompt for the AI image generator imagen-3.0. The prompt should describe a funny or absurd situation. For example: 'A group of penguins wearings sombreros, having a board meeting.' or 'A cat DJing at a mouse nightclub.'")
+
+	resp, err := client.Models.GenerateContent(ctx, "gemini-1.5-flash", prompt, nil)
+	if err != nil {
+		return "", err
+	}
+
+	var textContent string
+	if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
+		for _, part := range resp.Candidates[0].Content.Parts {
+			if part.Text != "" {
+				textContent = string(part.Text)
+				break
+			}
+		}
+	}
+
+	if textContent == "" {
+		return "", fmt.Errorf("failed to extract text from Gemini response for image prompt")
+	}
+
+	return textContent, nil
+}
+
+func generateImage(ctx context.Context, prompt string) (string, error) {
+	apiKey := os.Getenv("GOOGLE_API_KEY")
+	if apiKey == "" {
+		return "", fmt.Errorf("GOOGLE_API_KEY not set")
+	}
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey: apiKey,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	config := &genai.GenerateImagesConfig{
+		NumberOfImages: 1,
+	}
+
+	response, err := client.Models.GenerateImages(
+		ctx,
+		"imagen-3.0-generate-002",
+		"generate an image of: "+prompt,
+		config,
+	)
+
+	if err != nil {
+		return "", err
+	}
+
+	for _, image := range response.GeneratedImages {
+		return fmt.Sprintf("data:image/png;base64,%s", base64.StdEncoding.EncodeToString(image.Image.ImageBytes)), nil
+	}
+
+	return "", fmt.Errorf("no image data in response from prompt: %s", prompt)
 }
 
 func getClappingGiphy(ctx context.Context) (string, error) {
@@ -217,6 +282,18 @@ func getRandomGifFromCache() string {
 func gameHandler(w http.ResponseWriter, r *http.Request) {
 	participantName := strings.TrimPrefix(r.URL.Path, "/game/")
 
+	data := struct {
+		ParticipantName string
+	}{
+		ParticipantName: participantName,
+	}
+
+	templates.ExecuteTemplate(w, "game.html", data)
+}
+
+func gameDataHandler(w http.ResponseWriter, r *http.Request) {
+	participantName := strings.TrimPrefix(r.URL.Path, "/api/game-data/")
+
 	businessName, slogan, err := generateBusinessIdea(r.Context())
 	if err != nil {
 		http.Error(w, "Failed to generate business idea", http.StatusInternalServerError)
@@ -229,21 +306,48 @@ func gameHandler(w http.ResponseWriter, r *http.Request) {
 		clappingGif = "https://media.giphy.com/media/3o7abB06u9bNzA8lu8/giphy.gif"
 	}
 
+	imagePrompt1, err := generateImagePrompt(r.Context())
+	if err != nil {
+		log.Printf("Failed to generate image prompt 1: %v", err)
+		http.Error(w, "Failed to generate image prompt 1", http.StatusInternalServerError)
+		return
+	}
+	image1, err := generateImage(r.Context(), imagePrompt1)
+	if err != nil {
+		log.Printf("Failed to generate image 1 with prompt '%s': %v", imagePrompt1, err)
+		http.Error(w, "Failed to generate image 1", http.StatusInternalServerError)
+		return
+	}
+
+	imagePrompt2, err := generateImagePrompt(r.Context())
+	if err != nil {
+		log.Printf("Failed to generate image prompt 2: %v", err)
+		http.Error(w, "Failed to generate image prompt 2", http.StatusInternalServerError)
+		return
+	}
+	image2, err := generateImage(r.Context(), imagePrompt2)
+	if err != nil {
+		log.Printf("Failed to generate image 2 with prompt '%s': %v", imagePrompt2, err)
+		http.Error(w, "Failed to generate image 2", http.StatusInternalServerError)
+		return
+	}
+
 	data := struct {
-		ParticipantName string
-		BusinessName    string
-		Slogan          string
-		Image1          string
-		Image2          string
-		ClappingGif     string
+		ParticipantName string `json:"participantName"`
+		BusinessName    string `json:"businessName"`
+		Slogan          string `json:"slogan"`
+		Image1          string `json:"image1"`
+		Image2          string `json:"image2"`
+		ClappingGif     string `json:"clappingGif"`
 	}{
 		ParticipantName: participantName,
 		BusinessName:    businessName,
 		Slogan:          slogan,
-		Image1:          fmt.Sprintf("https://picsum.photos/seed/%d/800/600", rand.Intn(1000)),
-		Image2:          fmt.Sprintf("https://picsum.photos/seed/%d/800/600", rand.Intn(1000)+1000),
+		Image1:          image1,
+		Image2:          image2,
 		ClappingGif:     clappingGif,
 	}
 
-	templates.ExecuteTemplate(w, "game.html", data)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(data)
 }
