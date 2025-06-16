@@ -111,7 +111,7 @@ func generateBusinessIdea(ctx context.Context) (string, string, error) {
 		return "", "", err
 	}
 	prompt := genai.Text("Generate a fake, humorous business name and a slogan for it. Return it as 'Name: <name> Slogan: <slogan>'")
-	resp, err := client.Models.GenerateContent(ctx, "gemini-1.5-flash", prompt, nil)
+	resp, err := client.Models.GenerateContent(ctx, "gemini-1.5-pro-latest", prompt, nil)
 
 	if err != nil {
 		return "", "", err
@@ -153,28 +153,19 @@ func generateImagePrompt(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	prompt := genai.Text("Generate a short, humorous, SFW prompt for the AI image generator imagen-3.0. The prompt should describe a funny or absurd situation. For example: 'A group of penguins wearings sombreros, having a board meeting.' or 'A cat DJing at a mouse nightclub.'")
+	config := &genai.GenerateContentConfig{
+		Temperature:     genai.Ptr[float32](0.9),
+		MaxOutputTokens: 400,
+	}
 
-	resp, err := client.Models.GenerateContent(ctx, "gemini-1.5-flash", prompt, nil)
+	prompt := genai.Text("Generate a single, detailed visual concept for a humorous AI-generated image featuring a person in a highly absurd, unexpected situation. The setting, props, and action should be visually rich and specific. The scene should involve only humans (or humanoid roles), not animals, unless they are essential to the joke. Avoid repetition of themes like squirrels, woodland scenes, or typical fantasy tropes. Tailor the description to suit a photorealistic or stylized image model like imagen-3.0-generate-002. Example: 'A man in a tuxedo frantically typing on a glowing laptop in the middle of a noodle-eating contest, surrounded by confused contestants and flying spaghetti.'")
+
+	resp, err := client.Models.GenerateContent(ctx, "gemini-1.5-pro-latest", prompt, config)
 	if err != nil {
 		return "", err
 	}
 
-	var textContent string
-	if len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
-		for _, part := range resp.Candidates[0].Content.Parts {
-			if part.Text != "" {
-				textContent = string(part.Text)
-				break
-			}
-		}
-	}
-
-	if textContent == "" {
-		return "", fmt.Errorf("failed to extract text from Gemini response for image prompt")
-	}
-
-	return textContent, nil
+	return resp.Text(), nil
 }
 
 func generateImage(ctx context.Context, prompt string) (string, error) {
@@ -312,6 +303,7 @@ func gameDataHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to generate image prompt 1", http.StatusInternalServerError)
 		return
 	}
+	log.Printf("Generated Image Prompt 1: %s", imagePrompt1)
 	image1, err := generateImage(r.Context(), imagePrompt1)
 	if err != nil {
 		log.Printf("Failed to generate image 1 with prompt '%s': %v", imagePrompt1, err)
@@ -325,6 +317,7 @@ func gameDataHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to generate image prompt 2", http.StatusInternalServerError)
 		return
 	}
+	log.Printf("Generated Image Prompt 2: %s", imagePrompt2)
 	image2, err := generateImage(r.Context(), imagePrompt2)
 	if err != nil {
 		log.Printf("Failed to generate image 2 with prompt '%s': %v", imagePrompt2, err)
