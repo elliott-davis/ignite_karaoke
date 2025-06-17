@@ -134,7 +134,7 @@ func (g *AiGenerator) GenerateImagePrompt(ctx context.Context) (string, error) {
 
 	config := &genai.GenerateContentConfig{
 		Temperature:     genai.Ptr[float32](0.9),
-		MaxOutputTokens: 400,
+		MaxOutputTokens: 300,
 	}
 
 	finalPrompt := fmt.Sprintf("Based on the following JSON, generate the 'final_prompt':\n\n%s", string(jsonRequest))

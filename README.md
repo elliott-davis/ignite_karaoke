@@ -2,6 +2,10 @@
 
 This is a Go application for a fun presentation game called Ignite Karaoke.
 
+## Demo
+
+![](ignite.gif)
+
 ## Setup
 
 1.  **Environment Variables:**
