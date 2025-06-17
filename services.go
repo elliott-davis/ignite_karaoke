@@ -43,11 +43,28 @@ func NewAiGenerator(apiKey string) (*AiGenerator, error) {
 }
 
 func (g *AiGenerator) GenerateBusinessIdea(ctx context.Context) (string, string, error) {
+	businessTypes := []string{"a mobile app", "a subscription box", "a gourmet food truck", "a line of smart home devices", "a bespoke tailoring service", "a virtual reality arcade", "an artisanal coffee shop", "a pet psychic agency", "a zero-gravity yoga studio"}
+	targetAudiences := []string{"time-traveling tourists", "sentient houseplants", "retired superheroes", "aliens on vacation", "ghosts with unfinished business", "zombies who are into personal growth", "dolphins who want to be web developers", "cats who are learning to code", "very-online vampires"}
+	absurdProblems := []string{"socks that are always lonely", "pigeons that are too loud", "a toaster with an attitude problem", "the existential dread of a Roomba", "lost TV remotes", "dreams that are too boring", "awkward silences in elevators", "when your pet starts talking about philosophy", "running out of things to watch on streaming services"}
+
+	request := BusinessIdeaRequest{
+		BusinessType:   getRandomElement(businessTypes),
+		TargetAudience: getRandomElement(targetAudiences),
+		AbsurdProblem:  getRandomElement(absurdProblems),
+		Instructions:   "Generate a fake, humorous business name and a slogan for it based on the fields above. Return it as 'Name: <name> Slogan: <slogan>'",
+	}
+
+	jsonRequest, err := json.Marshal(request)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to marshal business idea request: %w", err)
+	}
+
 	config := &genai.GenerateContentConfig{
 		Temperature: genai.Ptr[float32](0.9),
 	}
 
-	prompt := genai.Text("Generate a fake, humorous business name and a slogan for it. Return it as 'Name: <name> Slogan: <slogan>'")
+	finalPrompt := fmt.Sprintf("Based on the following JSON, fulfill the instructions:\n\n%s", string(jsonRequest))
+	prompt := genai.Text(finalPrompt)
 	resp, err := g.client.Models.GenerateContent(ctx, "gemini-1.5-pro-latest", prompt, config)
 
 	if err != nil {
@@ -76,6 +93,13 @@ func (g *AiGenerator) GenerateBusinessIdea(ctx context.Context) (string, string,
 	sloganPart := strings.TrimSpace(parts[1])
 
 	return namePart, sloganPart, nil
+}
+
+type BusinessIdeaRequest struct {
+	BusinessType   string `json:"business_type"`
+	TargetAudience string `json:"target_audience"`
+	AbsurdProblem  string `json:"absurd_problem"`
+	Instructions   string `json:"instructions"`
 }
 
 type ImagePromptRequest struct {
