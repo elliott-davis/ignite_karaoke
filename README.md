@@ -16,6 +16,26 @@ This is a Go application for a fun presentation game called Ignite Karaoke.
     ```bash
     export GOOGLE_API_KEY="your_google_api_key"
     export GIPHY_API_KEY="your_giphy_api_key"
+    
+    # Optional: Configure content cache (defaults shown)
+    export CACHE_SIZE="20"           # Number of pre-generated game sessions to cache
+    export ENABLE_PRELOAD="true"     # Whether to enable background content generation
+    ```
+
+    **Cache Configuration:**
+    - `CACHE_SIZE`: Controls how many complete game sessions are pre-generated and cached (default: 20)
+      - For **development**: Set to a low number like `3` or `5` to reduce API usage
+      - For **production**: Use default `20` or higher for better performance
+    - `ENABLE_PRELOAD`: Controls whether content is generated in the background (default: true)
+      - For **development**: Set to `false` to disable background generation
+      - For **production**: Keep as `true` for optimal performance
+
+    **Development Example:**
+    ```bash
+    export GOOGLE_API_KEY="your_google_api_key"
+    export GIPHY_API_KEY="your_giphy_api_key"
+    export CACHE_SIZE="3"
+    export ENABLE_PRELOAD="false"
     ```
 
     You will need to use a tool like `direnv` to automatically load these environment variables when you are in the project directory. If you don't use `direnv`, you'll need to source the file (`source .envrc`) before running the application.

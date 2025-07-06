@@ -2,10 +2,10 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 )
 
 func (app *App) indexHandler(w http.ResponseWriter, r *http.Request) {
@@ -31,10 +31,19 @@ func (app *App) indexHandler(w http.ResponseWriter, r *http.Request) {
 func (app *App) adminHandler(w http.ResponseWriter, r *http.Request) {
 	app.participantsMu.Lock()
 	defer app.participantsMu.Unlock()
+
 	data := struct {
-		Participants []string
+		Participants   []string
+		CacheSize      int
+		CacheLoaded    bool
+		MaxCacheSize   int
+		PreloadRunning bool
 	}{
-		Participants: app.participants,
+		Participants:   app.participants,
+		CacheSize:      app.contentCache.Size(),
+		CacheLoaded:    app.contentCache.IsLoaded(),
+		MaxCacheSize:   app.contentCache.maxSize,
+		PreloadRunning: app.isPreloadRunning(),
 	}
 	app.templates.ExecuteTemplate(w, "admin.html", data)
 }
@@ -119,45 +128,33 @@ func (app *App) gameHandler(w http.ResponseWriter, r *http.Request) {
 func (app *App) gameDataHandler(w http.ResponseWriter, r *http.Request) {
 	participantName := strings.TrimPrefix(r.URL.Path, "/api/game-data/")
 
-	businessName, slogan, err := app.generator.GenerateBusinessIdea(r.Context())
-	if err != nil {
-		http.Error(w, "Failed to generate business idea", http.StatusInternalServerError)
-		return
+	// Try to get content from cache first
+	content := app.contentCache.Pop()
+
+	if content == nil {
+		// Cache is empty - check if we should wait or generate on-demand
+		if !app.contentCache.IsLoaded() {
+			// Cache is still loading, wait a bit and try again
+			log.Printf("Cache not loaded yet, waiting for participant %s", participantName)
+			time.Sleep(2 * time.Second)
+			content = app.contentCache.Pop()
+		}
+
+		if content == nil {
+			// Still no content available, generate on-demand as fallback
+			log.Printf("Cache empty, generating content on-demand for participant %s", participantName)
+
+			var err error
+			content, err = app.generateGameContent(r.Context())
+			if err != nil {
+				log.Printf("Failed to generate content on-demand: %v", err)
+				http.Error(w, "Failed to generate game content", http.StatusInternalServerError)
+				return
+			}
+		}
 	}
 
-	clappingGif, err := app.GetClappingGiphy(r.Context())
-	if err != nil {
-		fmt.Printf("Failed to get clapping gif: %s\n", err)
-		clappingGif = "https://media.giphy.com/media/3o7abB06u9bNzA8lu8/giphy.gif"
-	}
-
-	imagePrompt1, err := app.generator.GenerateImagePrompt(r.Context())
-	if err != nil {
-		log.Printf("Failed to generate image prompt 1: %v", err)
-		http.Error(w, "Failed to generate image prompt 1", http.StatusInternalServerError)
-		return
-	}
-	log.Printf("Generated Image Prompt 1: %s", imagePrompt1)
-	image1, err := app.generator.GenerateImage(r.Context(), imagePrompt1)
-	if err != nil {
-		log.Printf("Failed to generate image 1 with prompt '%s': %v", imagePrompt1, err)
-		http.Error(w, "Failed to generate image 1", http.StatusInternalServerError)
-		return
-	}
-
-	imagePrompt2, err := app.generator.GenerateImagePrompt(r.Context())
-	if err != nil {
-		log.Printf("Failed to generate image prompt 2: %v", err)
-		http.Error(w, "Failed to generate image prompt 2", http.StatusInternalServerError)
-		return
-	}
-	log.Printf("Generated Image Prompt 2: %s", imagePrompt2)
-	image2, err := app.generator.GenerateImage(r.Context(), imagePrompt2)
-	if err != nil {
-		log.Printf("Failed to generate image 2 with prompt '%s': %v", imagePrompt2, err)
-		http.Error(w, "Failed to generate image 2", http.StatusInternalServerError)
-		return
-	}
+	log.Printf("Serving game content for participant %s (cache size: %d)", participantName, app.contentCache.Size())
 
 	data := struct {
 		ParticipantName string `json:"participantName"`
@@ -168,13 +165,33 @@ func (app *App) gameDataHandler(w http.ResponseWriter, r *http.Request) {
 		ClappingGif     string `json:"clappingGif"`
 	}{
 		ParticipantName: participantName,
-		BusinessName:    businessName,
-		Slogan:          slogan,
-		Image1:          image1,
-		Image2:          image2,
-		ClappingGif:     clappingGif,
+		BusinessName:    content.BusinessName,
+		Slogan:          content.Slogan,
+		Image1:          content.Image1,
+		Image2:          content.Image2,
+		ClappingGif:     content.ClappingGif,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(data)
+}
+
+func (app *App) preloadCacheHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Generate one piece of content immediately
+	content, err := app.generateGameContent(r.Context())
+	if err != nil {
+		log.Printf("Failed to generate content manually: %v", err)
+		http.Error(w, "Failed to generate content", http.StatusInternalServerError)
+		return
+	}
+
+	app.contentCache.Push(*content)
+	log.Printf("Manually generated content. Cache size: %d", app.contentCache.Size())
+
+	http.Redirect(w, r, "/admin", http.StatusSeeOther)
 }

@@ -1,9 +1,10 @@
 # Ignore .envrc file containing secrets
 .envrc
+.env
 
 # Ignore compiled binary
 ignite_karaoke
 
 # Ignore air temp directory and log file
 tmp
-air.log 
+air.log

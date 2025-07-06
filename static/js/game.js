@@ -9,9 +9,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const participantName = window.location.pathname.split('/').pop();
 
+    // Show more informative loading message
+    const loadingMessages = [
+        "Generating your presentation...",
+        "Creating absurd business ideas...",
+        "Crafting ridiculous images...",
+        "Preparing comedy gold...",
+        "Almost ready for your moment of glory..."
+    ];
+    
+    let messageIndex = 0;
+    const messageInterval = setInterval(() => {
+        if (messageIndex < loadingMessages.length - 1) {
+            messageIndex++;
+            loader.querySelector('p').textContent = loadingMessages[messageIndex];
+        }
+    }, 3000);
+
     fetch(`/api/game-data/${participantName}`)
         .then(response => response.json())
         .then(data => {
+            clearInterval(messageInterval);
+            
             document.getElementById('business-name').textContent = data.businessName;
             document.getElementById('slogan').textContent = data.slogan;
             document.getElementById('image1').src = data.image1;
@@ -25,6 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
             startTimer();
         })
         .catch(error => {
+            clearInterval(messageInterval);
             console.error('Error fetching game data:', error);
             loader.innerHTML = '<p>Failed to load game data. Please try again.</p>';
         });

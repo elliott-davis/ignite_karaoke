@@ -1,0 +1,50 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch Ignite Karaoke",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}",
+            "envFile": "${workspaceFolder}/.env",
+            "args": [],
+            "showLog": true,
+            "trace": "verbose"
+        },
+        {
+            "name": "Launch Ignite Karaoke (Debug Mode)",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}",
+            "envFile": "${workspaceFolder}/.env",
+            "args": [],
+            "showLog": true,
+            "trace": "verbose",
+            "stopOnEntry": false
+        },
+        {
+            "name": "Launch Ignite Karaoke (Direct .envrc)",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}",
+            "env": {
+                "GIPHY_API_KEY": "HCeeisBtezdcRJMwrZFqv0cOBjhwJl89",
+                "GOOGLE_API_KEY": "AIzaSyAWIIt5xJQADeCuFhKhLsDsYfMHJ6ClO8c"
+            },
+            "args": [],
+            "showLog": true,
+            "trace": "verbose",
+            "stopOnEntry": false
+        },
+        {
+            "name": "Attach to Process",
+            "type": "go",
+            "request": "attach",
+            "mode": "local",
+            "processId": "${command:pickProcess}"
+        }
+    ]
+} 

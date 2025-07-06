@@ -1,0 +1,15 @@
+# Example environment configuration for Ignite Karaoke
+# Copy this file to .envrc and fill in your API keys
+
+# Required API keys
+export GOOGLE_API_KEY="your_google_api_key_here"
+export GIPHY_API_KEY="your_giphy_api_key_here"
+
+# Cache configuration
+# For development: Use smaller cache size and disable preloading to save API calls
+export CACHE_SIZE="3"
+export ENABLE_PRELOAD="false"
+
+# For production: Use larger cache and enable preloading for better performance
+# export CACHE_SIZE="20"
+# export ENABLE_PRELOAD="true" 

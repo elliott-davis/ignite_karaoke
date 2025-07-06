@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"html/template"
@@ -8,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 )
 
 //go:embed templates
@@ -26,6 +28,28 @@ func main() {
 		log.Fatal("GOOGLE_API_KEY not set")
 	}
 
+	// Configure cache size from environment variable
+	cacheSize := 20 // Default cache size for production
+	if cacheSizeStr := os.Getenv("CACHE_SIZE"); cacheSizeStr != "" {
+		if size, err := strconv.Atoi(cacheSizeStr); err == nil && size > 0 {
+			cacheSize = size
+		} else {
+			log.Printf("Invalid CACHE_SIZE value '%s', using default: %d", cacheSizeStr, cacheSize)
+		}
+	}
+
+	// Configure whether to enable preloading
+	enablePreload := true // Default enabled for production
+	if preloadStr := os.Getenv("ENABLE_PRELOAD"); preloadStr != "" {
+		if preload, err := strconv.ParseBool(preloadStr); err == nil {
+			enablePreload = preload
+		} else {
+			log.Printf("Invalid ENABLE_PRELOAD value '%s', using default: %t", preloadStr, enablePreload)
+		}
+	}
+
+	log.Printf("Content cache configured: size=%d, preload=%t", cacheSize, enablePreload)
+
 	templates := template.Must(template.ParseFS(templateFS, "templates/*.html"))
 
 	generator, err := NewAiGenerator(googleAPIKey)
@@ -39,6 +63,15 @@ func main() {
 		googleAPIKey: googleAPIKey,
 		generator:    generator,
 		usedGifs:     make(map[string]bool),
+		contentCache: NewContentCache(cacheSize),
+	}
+
+	// Start background content preloader only if enabled
+	if enablePreload {
+		app.StartContentPreloader(context.Background())
+		log.Println("Content preloader started")
+	} else {
+		log.Println("Content preloader disabled")
 	}
 
 	http.HandleFunc("/", app.indexHandler)
@@ -46,6 +79,7 @@ func main() {
 	http.HandleFunc("/participants", app.participantsHandler)
 	http.HandleFunc("/remove-participant", app.removeParticipantHandler)
 	http.HandleFunc("/next-participant", app.nextParticipantHandler)
+	http.HandleFunc("/preload-cache", app.preloadCacheHandler)
 	http.HandleFunc("/game/", app.gameHandler)
 	http.HandleFunc("/api/game-data/", app.gameDataHandler)
 

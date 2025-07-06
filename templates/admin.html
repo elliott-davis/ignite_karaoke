@@ -11,6 +11,22 @@
     <div class="container">
         <h1>Admin Panel</h1>
 
+        <h2>Content Cache Status</h2>
+        <div style="background-color: #222; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+            <p><strong>Cache Size:</strong> {{.CacheSize}} / {{.MaxCacheSize}}</p>
+            <p><strong>Cache Status:</strong> {{if .CacheLoaded}}Loaded{{else}}Loading...{{end}}</p>
+            <p><strong>Preloader:</strong> {{if .PreloadRunning}}Running{{else}}Disabled{{end}}</p>
+            {{if .PreloadRunning}}
+            <form action="/preload-cache" method="post" style="display: inline;">
+                <button type="submit" style="background-color: #5cb85c;">Generate Content Now</button>
+            </form>
+            {{else}}
+            <p style="color: #f0ad4e; font-size: 0.9em;">
+                <em>Background preloading is disabled. Content will be generated on-demand.</em>
+            </p>
+            {{end}}
+        </div>
+
         <h2>Add/Update Participants</h2>
         <form action="/participants" method="post">
             <textarea name="names" rows="10" cols="30" placeholder="Enter participant names, one per line. This will replace the entire list.">{{range .Participants}}{{.}}

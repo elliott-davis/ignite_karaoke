@@ -14,6 +14,54 @@ import (
 	"google.golang.org/genai"
 )
 
+// RetryConfig holds configuration for retry behavior
+type RetryConfig struct {
+	MaxRetries int
+	BaseDelay  time.Duration
+}
+
+// DefaultRetryConfig provides sensible defaults for retry behavior
+var DefaultRetryConfig = RetryConfig{
+	MaxRetries: 5,
+	BaseDelay:  time.Second,
+}
+
+// retryWithBackoff executes a function with exponential backoff retry logic
+func retryWithBackoff(ctx context.Context, config RetryConfig, operation func() error) error {
+	var lastErr error
+
+	for attempt := 0; attempt <= config.MaxRetries; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff with jitter
+			multiplier := 1 << uint(attempt-1)
+			delay := time.Duration(float64(config.BaseDelay) * float64(multiplier))
+			jitter := time.Duration(rand.Float64() * float64(delay) * 0.1) // 10% jitter
+			totalDelay := delay + jitter
+
+			log.Printf("Retry attempt %d/%d after %v", attempt, config.MaxRetries, totalDelay)
+
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(totalDelay):
+			}
+		}
+
+		if err := operation(); err != nil {
+			lastErr = err
+			log.Printf("Operation failed on attempt %d: %v", attempt+1, err)
+			continue
+		}
+
+		if attempt > 0 {
+			log.Printf("Operation succeeded on retry attempt %d", attempt)
+		}
+		return nil
+	}
+
+	return fmt.Errorf("operation failed after %d attempts, last error: %w", config.MaxRetries+1, lastErr)
+}
+
 type Generator interface {
 	GenerateBusinessIdea(ctx context.Context) (string, string, error)
 	GenerateImagePrompt(ctx context.Context) (string, error)
@@ -65,10 +113,16 @@ func (g *AiGenerator) GenerateBusinessIdea(ctx context.Context) (string, string,
 
 	finalPrompt := fmt.Sprintf("Based on the following JSON, fulfill the instructions:\n\n%s", string(jsonRequest))
 	prompt := genai.Text(finalPrompt)
-	resp, err := g.client.Models.GenerateContent(ctx, "gemini-1.5-pro-latest", prompt, config)
+
+	var resp *genai.GenerateContentResponse
+	err = retryWithBackoff(ctx, DefaultRetryConfig, func() error {
+		var apiErr error
+		resp, apiErr = g.client.Models.GenerateContent(ctx, "gemini-1.5-pro-latest", prompt, config)
+		return apiErr
+	})
 
 	if err != nil {
-		return "", "", err
+		return "", "", fmt.Errorf("failed to generate business idea after retries: %w", err)
 	}
 
 	var textContent string
@@ -138,12 +192,17 @@ func (g *AiGenerator) GenerateImagePrompt(ctx context.Context) (string, error) {
 	}
 
 	finalPrompt := fmt.Sprintf("Based on the following JSON, generate the 'final_prompt':\n\n%s", string(jsonRequest))
-
 	prompt := genai.Text(finalPrompt)
 
-	resp, err := g.client.Models.GenerateContent(ctx, "gemini-1.5-pro-latest", prompt, config)
+	var resp *genai.GenerateContentResponse
+	err = retryWithBackoff(ctx, DefaultRetryConfig, func() error {
+		var apiErr error
+		resp, apiErr = g.client.Models.GenerateContent(ctx, "gemini-1.5-pro-latest", prompt, config)
+		return apiErr
+	})
+
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to generate image prompt after retries: %w", err)
 	}
 
 	return resp.Text(), nil
@@ -154,15 +213,20 @@ func (g *AiGenerator) GenerateImage(ctx context.Context, prompt string) (string,
 		NumberOfImages: 1,
 	}
 
-	response, err := g.client.Models.GenerateImages(
-		ctx,
-		"imagen-3.0-generate-002",
-		"generate an image of: "+prompt,
-		config,
-	)
+	var response *genai.GenerateImagesResponse
+	err := retryWithBackoff(ctx, DefaultRetryConfig, func() error {
+		var apiErr error
+		response, apiErr = g.client.Models.GenerateImages(
+			ctx,
+			"imagen-3.0-generate-002",
+			"generate an image of: "+prompt,
+			config,
+		)
+		return apiErr
+	})
 
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to generate image after retries: %w", err)
 	}
 
 	for _, image := range response.GeneratedImages {
@@ -189,11 +253,6 @@ func (app *App) GetClappingGiphy(ctx context.Context) (string, error) {
 	app.giphyCacheMu.Unlock()
 
 	url := fmt.Sprintf("https://api.giphy.com/v1/gifs/search?api_key=%s&q=clapping&limit=50&rating=g", app.giphyAPIKey)
-	resp, err := http.Get(url)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
 
 	var giphyResp struct {
 		Data []struct {
@@ -205,8 +264,27 @@ func (app *App) GetClappingGiphy(ctx context.Context) (string, error) {
 		} `json:"data"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&giphyResp); err != nil {
-		return "", err
+	err := retryWithBackoff(ctx, DefaultRetryConfig, func() error {
+		resp, err := http.Get(url)
+		if err != nil {
+			return fmt.Errorf("failed to make HTTP request to Giphy API: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("Giphy API returned status code %d", resp.StatusCode)
+		}
+
+		if err := json.NewDecoder(resp.Body).Decode(&giphyResp); err != nil {
+			return fmt.Errorf("failed to decode Giphy API response: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		log.Printf("Failed to fetch from Giphy API after retries: %v", err)
+		return "https://media.giphy.com/media/3o7abB06u9bNzA8lu8/giphy.gif", nil
 	}
 
 	app.giphyCacheMu.Lock()
@@ -246,4 +324,150 @@ func (app *App) getRandomGifFromCache() string {
 	gif := app.giphyCache[rand.Intn(len(app.giphyCache))]
 	app.usedGifs[gif] = true
 	return gif
+}
+
+// generateGameContent creates a complete GameContent with all required assets
+func (app *App) generateGameContent(ctx context.Context) (*GameContent, error) {
+	// Generate business idea
+	businessName, slogan, err := app.generator.GenerateBusinessIdea(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate business idea: %w", err)
+	}
+
+	// Generate clapping GIF
+	clappingGif, err := app.GetClappingGiphy(ctx)
+	if err != nil {
+		log.Printf("Failed to get clapping gif: %v", err)
+		clappingGif = "https://media.giphy.com/media/3o7abB06u9bNzA8lu8/giphy.gif"
+	}
+
+	// Generate first image
+	imagePrompt1, err := app.generator.GenerateImagePrompt(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate image prompt 1: %w", err)
+	}
+
+	image1, err := app.generator.GenerateImage(ctx, imagePrompt1)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate image 1: %w", err)
+	}
+
+	// Generate second image
+	imagePrompt2, err := app.generator.GenerateImagePrompt(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate image prompt 2: %w", err)
+	}
+
+	image2, err := app.generator.GenerateImage(ctx, imagePrompt2)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate image 2: %w", err)
+	}
+
+	return &GameContent{
+		BusinessName: businessName,
+		Slogan:       slogan,
+		Image1:       image1,
+		Image2:       image2,
+		ClappingGif:  clappingGif,
+		CreatedAt:    time.Now(),
+	}, nil
+}
+
+// StartContentPreloader starts the background content preloader
+func (app *App) StartContentPreloader(ctx context.Context) {
+	app.preloadMu.Lock()
+	defer app.preloadMu.Unlock()
+
+	if app.preloadRunning {
+		return // Already running
+	}
+
+	app.preloadRunning = true
+	app.preloadStop = make(chan struct{})
+
+	go app.runContentPreloader(ctx)
+}
+
+// StopContentPreloader stops the background content preloader
+func (app *App) StopContentPreloader() {
+	app.preloadMu.Lock()
+	defer app.preloadMu.Unlock()
+
+	if !app.preloadRunning {
+		return // Not running
+	}
+
+	close(app.preloadStop)
+	app.preloadRunning = false
+}
+
+// isPreloadRunning returns whether the content preloader is currently running
+func (app *App) isPreloadRunning() bool {
+	app.preloadMu.Lock()
+	defer app.preloadMu.Unlock()
+	return app.preloadRunning
+}
+
+// runContentPreloader is the main preloader loop
+func (app *App) runContentPreloader(ctx context.Context) {
+	log.Println("Starting content preloader...")
+
+	// Initial load - fill cache to 80% capacity
+	initialTarget := int(float64(app.contentCache.maxSize) * 0.8)
+	for i := 0; i < initialTarget; i++ {
+		select {
+		case <-app.preloadStop:
+			log.Println("Content preloader stopped during initial load")
+			return
+		case <-ctx.Done():
+			log.Println("Content preloader stopped due to context cancellation")
+			return
+		default:
+		}
+
+		content, err := app.generateGameContent(ctx)
+		if err != nil {
+			log.Printf("Failed to generate content during initial load: %v", err)
+			time.Sleep(5 * time.Second) // Wait before retrying
+			continue
+		}
+
+		app.contentCache.Push(*content)
+		log.Printf("Initial preload: generated content %d/%d", i+1, initialTarget)
+	}
+
+	app.contentCache.SetLoaded()
+	log.Printf("Initial content preload completed. Cache size: %d", app.contentCache.Size())
+
+	// Maintenance loop - keep cache topped up
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-app.preloadStop:
+			log.Println("Content preloader stopped")
+			return
+		case <-ctx.Done():
+			log.Println("Content preloader stopped due to context cancellation")
+			return
+		case <-ticker.C:
+			// Check if cache needs refilling
+			cacheSize := app.contentCache.Size()
+			targetSize := int(float64(app.contentCache.maxSize) * 0.8)
+
+			if cacheSize < targetSize {
+				log.Printf("Cache low (%d/%d), generating new content...", cacheSize, targetSize)
+
+				content, err := app.generateGameContent(ctx)
+				if err != nil {
+					log.Printf("Failed to generate content during maintenance: %v", err)
+					continue
+				}
+
+				app.contentCache.Push(*content)
+				log.Printf("Generated new content. Cache size: %d", app.contentCache.Size())
+			}
+		}
+	}
 }
